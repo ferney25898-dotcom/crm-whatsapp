@@ -25,10 +25,13 @@ cuando cierra la venta el pedido queda listo para montarlo en Dropi.
 
 ```bash
 npm install
-cp .env.example .env      # pon aqui tu ANTHROPIC_API_KEY (o cargala desde el panel)
-npx prisma migrate deploy
+cp .env.example .env      # en Windows: copy .env.example .env
+npm run setup             # genera el cliente de Prisma y crea la base de datos
 npm run dev
 ```
+
+En `.env` pones tu `ANTHROPIC_API_KEY`, o la cargas despues desde el panel de
+Configuracion.
 
 Abre http://localhost:3000.
 
