@@ -1,0 +1,303 @@
+// CRM WhatsApp + Dropi
+// Base de datos SQLite: un solo archivo, sin servidor externo.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// Configuracion global del negocio. Siempre existe una sola fila (id = 1).
+model Settings {
+  id           Int    @id @default(1)
+  businessName String @default("Mi Tienda")
+  country      String @default("CO")
+  currency     String @default("COP")
+  timezone     String @default("America/Bogota")
+
+  // Motor de IA
+  aiEnabled       Boolean @default(true)
+  aiProvider      String  @default("anthropic")
+  aiApiKey        String?
+  aiModel         String  @default("claude-haiku-4-5")
+  aiMaxTokens     Int     @default(500)
+  /// Instrucciones que aplican a TODOS los productos.
+  globalPrompt    String  @default("")
+  /// Segundos de espera antes de responder, para que se sienta humano.
+  responseDelaySec Int    @default(3)
+
+  // Comportamiento del bot
+  botEnabledByDefault Boolean @default(true)
+  /// Palabras que hacen que el bot pase la conversacion a un humano.
+  handoffKeywords     String  @default("asesor,humano,persona real,hablar con alguien")
+  /// Minutos sin respuesta del cliente antes de enviar un seguimiento.
+  followUpMinutes     Int     @default(60)
+  followUpEnabled     Boolean @default(false)
+  followUpMessage     String  @default("Hola! Sigues interesado en tu pedido? Te ayudo a completarlo.")
+
+  // Integracion con Dropi
+  dropiEnabled  Boolean @default(false)
+  dropiBaseUrl  String  @default("https://api.dropi.co")
+  dropiToken    String?
+  dropiUser     String?
+  dropiPassword String?
+  /// Ruta del servicio que crea pedidos. Se deja configurable porque Dropi
+  /// no publica su documentacion y puede cambiar segun el pais.
+  dropiOrderPath String @default("/integrations/orders")
+  /// Guardar el pedido en Dropi automaticamente al confirmarse la venta.
+  dropiAutoSend Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+}
+
+/// Un numero de WhatsApp conectado. Se pueden tener varios a la vez.
+model WhatsappSession {
+  id     String @id @default(cuid())
+  /// Nombre para identificarlo en el panel, ej: "Numero principal".
+  name   String
+  /// baileys = conexion por codigo QR | cloud = API oficial de Meta.
+  provider String @default("baileys")
+
+  phoneNumber String?
+  /// disconnected | connecting | qr | connected | banned
+  status      String  @default("disconnected")
+  /// Codigo QR vigente en formato data URL, para mostrarlo en el panel.
+  qrCode      String?
+  lastError   String?
+  isActive    Boolean @default(true)
+  /// Conectar automaticamente cuando arranca el servidor.
+  autoStart   Boolean @default(true)
+
+  // Solo para provider = "cloud" (API oficial de Meta)
+  cloudPhoneNumberId String?
+  cloudToken         String?
+  cloudVerifyToken   String?
+
+  /// Producto que se asume cuando entra un chat nuevo por este numero.
+  defaultProductId String?
+  defaultProduct   Product? @relation(fields: [defaultProductId], references: [id], onDelete: SetNull)
+
+  conversations Conversation[]
+
+  lastConnectedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+/// Producto en venta, con todo su entrenamiento para el bot.
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  sku         String?
+  active      Boolean @default(true)
+
+  // --- Datos comerciales ---
+  price       Float
+  /// Precio tachado / antes, solo para mostrar.
+  comparePrice Float?
+  cost        Float?
+  /// Costo de envio si no es gratis.
+  shippingCost Float  @default(0)
+  freeShipping Boolean @default(true)
+  description  String @default("")
+  /// URLs de imagenes separadas por linea. El bot puede enviarlas.
+  imageUrls    String @default("")
+
+  // --- Logistica ---
+  /// Ciudades con pago contra entrega. Vacio = todo el pais.
+  coverageCities String @default("")
+  deliveryTime   String @default("2 a 5 dias habiles")
+  paymentMethod  String @default("Pago contra entrega")
+
+  // --- Entrenamiento del bot ---
+  /// Como se presenta y que tono usa.
+  botPersona      String @default("Asesor de ventas amable, cercano y directo.")
+  /// Primer mensaje cuando el cliente escribe por el anuncio.
+  welcomeMessage  String @default("")
+  /// Argumentos de venta, uno por linea.
+  sellingPoints   String @default("")
+  /// Promociones activas, ej: "2 por $90.000".
+  promotions      String @default("")
+  /// Variantes disponibles, ej: "Colores: negro, blanco".
+  variants        String @default("")
+  /// Lo que el bot NO puede prometer ni decir.
+  restrictions    String @default("")
+  /// Instrucciones libres adicionales para este producto.
+  customInstructions String @default("")
+  /// Mensaje de cierre cuando ya se confirmo el pedido.
+  closingMessage  String @default("Listo! Tu pedido quedo registrado. Te llega en {tiempo_entrega} y pagas al recibir.")
+
+  // --- Reglas de cierre ---
+  /// Datos que el bot debe recoger antes de confirmar, separados por coma.
+  requiredFields String @default("nombre,telefono,direccion,ciudad,departamento")
+  /// Pedirle confirmacion explicita al cliente antes de cerrar.
+  confirmBeforeClosing Boolean @default(true)
+  /// Pasar a humano automaticamente al confirmar la venta.
+  handoffAfterSale     Boolean @default(false)
+
+  // --- Dropi ---
+  /// ID del producto dentro de Dropi, para enviar el pedido automatico.
+  dropiProductId  String?
+  dropiVariationId String?
+  dropiWarehouseId String?
+
+  faqs       Faq[]
+  objections Objection[]
+
+  conversations Conversation[]
+  orders        OrderItem[]
+  sessions      WhatsappSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Pregunta frecuente con su respuesta exacta.
+model Faq {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  order     Int     @default(0)
+}
+
+/// Objecion tipica del cliente y como responderla.
+model Objection {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// La duda del cliente, ej: "Esta muy caro".
+  trigger   String
+  response  String
+  order     Int     @default(0)
+}
+
+/// Persona que escribe por WhatsApp.
+model Contact {
+  id       String  @id @default(cuid())
+  phone    String  @unique
+  name     String?
+  city     String?
+  department String?
+  address  String?
+  notes    String?
+
+  conversations Conversation[]
+  orders        Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Un chat con un cliente.
+model Conversation {
+  id        String @id @default(cuid())
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  session   WhatsappSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  /// bot | human | closed
+  status     String  @default("bot")
+  /// El bot responde automaticamente en este chat.
+  botEnabled Boolean @default(true)
+  /// nuevo | interesado | datos_pendientes | confirmado | perdido
+  stage      String  @default("nuevo")
+  unread     Int     @default(0)
+  lastMessageAt DateTime @default(now())
+  /// Resumen que el bot va guardando de lo hablado.
+  summary    String?
+
+  messages Message[]
+  orders   Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastMessageAt])
+}
+
+/// Mensaje individual del chat.
+model Message {
+  id             String @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  /// in = del cliente | out = nuestro
+  direction String
+  /// customer | bot | agent | system
+  sender    String
+  body      String @default("")
+  /// image | audio | video | document, cuando aplica.
+  mediaType String?
+  mediaUrl  String?
+  /// ID del mensaje en WhatsApp, para no duplicar.
+  waMessageId String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+/// Venta confirmada, lista para montar en Dropi.
+model Order {
+  id     String @id @default(cuid())
+  /// Numero corto para referirse al pedido. Se asigna al crearlo.
+  number Int    @unique
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  // Datos tal como se pegan en Dropi
+  customerName String
+  phone        String
+  phone2       String?
+  address      String
+  city         String
+  department   String @default("")
+  notes        String @default("")
+
+  shippingCost Float @default(0)
+  total        Float @default(0)
+
+  /// pendiente | enviado | error | cancelado
+  status       String @default("pendiente")
+  /// manual | bot
+  source       String @default("bot")
+
+  // Resultado del envio a Dropi
+  dropiOrderId  String?
+  dropiGuide    String?
+  dropiResponse String?
+  sentAt        DateTime?
+
+  items OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  productName String
+  quantity    Int    @default(1)
+  unitPrice   Float
+  variant     String?
+}
