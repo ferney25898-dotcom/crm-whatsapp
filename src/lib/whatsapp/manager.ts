@@ -89,6 +89,18 @@ export function jidFromPhone(phone: string): string {
   return `${digits}@s.whatsapp.net`;
 }
 
+/**
+ * WhatsApp identifica a muchas cuentas nuevas con un "@lid" que no es el numero
+ * telefonico. Hay que responder a esa misma direccion, asi que la devolvemos
+ * junto con el telefono real cuando WhatsApp lo incluye aparte.
+ */
+function addressOf(message: WAMessage): { jid: string; phone: string } {
+  const jid = message.key.remoteJid as string;
+  const alt = message.key.remoteJidAlt;
+  const phoneJid = jid.endsWith("@lid") && alt ? alt : jid;
+  return { jid, phone: phoneFromJid(phoneJid) };
+}
+
 export function getRuntimeStatus(sessionId: string) {
   const runtime = runtimes.get(sessionId);
   return {
@@ -218,10 +230,12 @@ async function onIncoming(sessionId: string, message: WAMessage) {
   const mediaType = mediaTypeOf(message);
   if (!body && !mediaType) return;
 
+  const { jid: waJid, phone } = addressOf(message);
   const { handleIncomingMessage } = await import("@/lib/bot/pipeline");
   await handleIncomingMessage({
     sessionId,
-    phone: phoneFromJid(jid),
+    waJid,
+    phone,
     pushName: message.pushName ?? undefined,
     body,
     mediaType,
@@ -255,24 +269,23 @@ export async function resetSession(sessionId: string): Promise<void> {
   await setStatus(sessionId, { status: "disconnected", qrCode: null, lastError: null });
 }
 
-export async function sendText(sessionId: string, phone: string, text: string): Promise<void> {
+export async function sendText(sessionId: string, jid: string, text: string): Promise<void> {
   const runtime = runtimes.get(sessionId);
   if (!runtime?.socket) throw new Error("El numero no esta conectado");
-  await runtime.socket.sendMessage(jidFromPhone(phone), { text });
+  await runtime.socket.sendMessage(jid, { text });
 }
 
-export async function sendImage(sessionId: string, phone: string, url: string, caption?: string) {
+export async function sendImage(sessionId: string, jid: string, url: string, caption?: string) {
   const runtime = runtimes.get(sessionId);
   if (!runtime?.socket) throw new Error("El numero no esta conectado");
-  await runtime.socket.sendMessage(jidFromPhone(phone), { image: { url }, caption });
+  await runtime.socket.sendMessage(jid, { image: { url }, caption });
 }
 
 /** Marca "escribiendo..." para que la respuesta del bot se sienta natural. */
-export async function sendTyping(sessionId: string, phone: string) {
+export async function sendTyping(sessionId: string, jid: string) {
   const runtime = runtimes.get(sessionId);
   if (!runtime?.socket) return;
   try {
-    const jid = jidFromPhone(phone);
     await runtime.socket.presenceSubscribe(jid);
     await runtime.socket.sendPresenceUpdate("composing", jid);
   } catch {

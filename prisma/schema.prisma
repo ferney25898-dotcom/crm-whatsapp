@@ -180,6 +180,10 @@ model Objection {
 model Contact {
   id       String  @id @default(cuid())
   phone    String  @unique
+  /// Direccion exacta con la que WhatsApp identifica al contacto. Las cuentas
+  /// nuevas usan un identificador @lid distinto del numero telefonico, y hay
+  /// que responder a esa misma direccion.
+  waJid    String?
   name     String?
   city     String?
   department String?
@@ -215,6 +219,8 @@ model Conversation {
   lastMessageAt DateTime @default(now())
   /// Resumen que el bot va guardando de lo hablado.
   summary    String?
+  /// Ultimo error del bot en este chat, para mostrarlo en el panel.
+  lastBotError String?
 
   messages Message[]
   orders   Order[]

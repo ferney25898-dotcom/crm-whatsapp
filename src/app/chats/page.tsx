@@ -9,6 +9,7 @@ type ConversationRow = {
   status: string;
   stage: string;
   unread: number;
+  lastBotError: string | null;
   botEnabled: boolean;
   lastMessageAt: string;
   contact: { name: string | null; phone: string };
@@ -190,6 +191,12 @@ export default function ChatsPage() {
                 )}
               </button>
             </header>
+
+            {detail.lastBotError && (
+              <div className="border-b border-red-200 bg-red-50 px-5 py-2 text-xs text-red-700">
+                El bot no pudo responder — {detail.lastBotError}
+              </div>
+            )}
 
             <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 p-5">
               {detail.messages.map((message) => (

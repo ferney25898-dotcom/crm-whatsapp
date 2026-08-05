@@ -8,6 +8,8 @@ import { sendText, sendTyping } from "@/lib/whatsapp/manager";
 
 export type IncomingMessage = {
   sessionId: string;
+  /** Direccion exacta de WhatsApp a la que hay que responder. */
+  waJid: string;
   phone: string;
   pushName?: string;
   body: string;
@@ -17,6 +19,19 @@ export type IncomingMessage = {
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Guarda el motivo por el que el bot no pudo responder para que se vea en el
+ * panel, en vez de quedarse solo en la consola del servidor.
+ */
+async function reportBotError(conversationId: string, context: string, error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error(`[bot] ${context}: ${detail}`);
+  await prisma.conversation
+    .update({ where: { id: conversationId }, data: { lastBotError: `${context}: ${detail}` } })
+    .catch(() => null);
+  emitAppEvent({ type: "conversation", conversationId });
 }
 
 function matchesHandoff(text: string, keywords: string): boolean {
@@ -64,8 +79,8 @@ export async function handleIncomingMessage(incoming: IncomingMessage): Promise<
 
   const contact = await prisma.contact.upsert({
     where: { phone: incoming.phone },
-    update: incoming.pushName ? { name: incoming.pushName } : {},
-    create: { phone: incoming.phone, name: incoming.pushName ?? null },
+    update: { waJid: incoming.waJid, ...(incoming.pushName ? { name: incoming.pushName } : {}) },
+    create: { phone: incoming.phone, waJid: incoming.waJid, name: incoming.pushName ?? null },
   });
 
   const session = await prisma.whatsappSession.findUnique({ where: { id: incoming.sessionId } });
@@ -115,7 +130,7 @@ export async function handleIncomingMessage(incoming: IncomingMessage): Promise<
     });
     await sendText(
       incoming.sessionId,
-      incoming.phone,
+      incoming.waJid,
       "Claro, en un momento te contacta un asesor.",
     ).catch(() => null);
     await recordOutgoing({
@@ -150,20 +165,24 @@ export async function handleIncomingMessage(incoming: IncomingMessage): Promise<
       summary: conversation.summary,
     });
   } catch (error) {
-    console.error("[bot] no se pudo generar la respuesta", error);
+    await reportBotError(conversation.id, "No se pudo generar la respuesta", error);
     return;
   }
 
   if (!result?.reply) return;
 
-  await sendTyping(incoming.sessionId, incoming.phone);
+  await sendTyping(incoming.sessionId, incoming.waJid);
   if (settings.responseDelaySec > 0) await wait(settings.responseDelaySec * 1000);
 
   try {
-    await sendText(incoming.sessionId, incoming.phone, result.reply);
+    await sendText(incoming.sessionId, incoming.waJid, result.reply);
   } catch (error) {
-    console.error("[bot] no se pudo enviar la respuesta", error);
+    await reportBotError(conversation.id, "No se pudo enviar la respuesta", error);
     return;
+  }
+
+  if (conversation.lastBotError) {
+    await prisma.conversation.update({ where: { id: conversation.id }, data: { lastBotError: null } });
   }
 
   await recordOutgoing({ conversationId: conversation.id, body: result.reply, sender: "bot" });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordOutgoing } from "@/lib/bot/pipeline";
-import { sendText } from "@/lib/whatsapp/manager";
+import { jidFromPhone, sendText } from "@/lib/whatsapp/manager";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,8 @@ export async function POST(request: Request, { params }: Context) {
   }
 
   try {
-    await sendText(conversation.sessionId, conversation.contact.phone, body.trim());
+    const jid = conversation.contact.waJid ?? jidFromPhone(conversation.contact.phone);
+    await sendText(conversation.sessionId, jid, body.trim());
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo enviar";
     return NextResponse.json({ error: message }, { status: 400 });
