@@ -43,8 +43,11 @@ function hour(value: string) {
   return new Date(value).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
 }
 
+type ProductOption = { id: string; name: string };
+
 export default function ChatsPage() {
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [filter, setFilter] = useState("todos");
@@ -66,6 +69,12 @@ export default function ChatsPage() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    fetch("/api/products")
+      .then((response) => response.json())
+      .then(setProducts);
+  }, []);
 
   useEffect(() => {
     if (selectedId) loadDetail(selectedId);
@@ -99,6 +108,18 @@ export default function ChatsPage() {
       setError(data.error);
     }
     setSending(false);
+  }
+
+  /** Permite corregir el producto de un chat que quedo sin ficha asignada. */
+  async function changeProduct(productId: string) {
+    if (!detail) return;
+    await fetch(`/api/conversations/${detail.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId }),
+    });
+    loadDetail(detail.id);
+    loadConversations();
   }
 
   async function toggleBot() {
@@ -174,10 +195,21 @@ export default function ChatsPage() {
                 <p className="font-medium text-slate-900">
                   {detail.contact.name || detail.contact.phone}
                 </p>
-                <p className="text-xs text-slate-500">
-                  {detail.contact.phone}
-                  {detail.product ? ` · ${detail.product.name}` : " · sin producto asignado"}
-                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{detail.contact.phone}</span>
+                  <select
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                    value={detail.product?.id ?? ""}
+                    onChange={(e) => changeProduct(e.target.value)}
+                  >
+                    <option value="">Sin producto asignado</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <button onClick={toggleBot} className={detail.botEnabled ? "btn-ghost" : "btn-primary"}>
                 {detail.botEnabled ? (

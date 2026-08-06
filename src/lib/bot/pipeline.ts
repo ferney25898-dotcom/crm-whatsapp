@@ -118,6 +118,15 @@ export async function handleIncomingMessage(incoming: IncomingMessage): Promise<
     data: { lastMessageAt: new Date(), unread: { increment: 1 }, sessionId: incoming.sessionId },
   });
 
+  // Un chat abierto antes de configurar el producto se queda sin ficha, asi que
+  // adoptamos el producto por defecto del numero en cuanto exista.
+  if (!conversation.productId && session?.defaultProductId) {
+    conversation = await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { productId: session.defaultProductId },
+    });
+  }
+
   emitAppEvent({ type: "message", conversationId: conversation.id });
 
   // A partir de aqui decide el bot.
