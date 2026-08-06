@@ -60,56 +60,78 @@ async function request(path: string, body: unknown): Promise<DropiResult> {
 }
 
 /**
- * Rutas candidatas. Dropi no publica documentacion y el nombre del servicio que
- * crea pedidos cambia entre cuentas, asi que las probamos con un cuerpo vacio:
- * un 404 significa que la ruta no existe y un error de validacion (400/422)
- * significa que si existe. Con el cuerpo vacio Dropi nunca crea un pedido.
+ * Dropi respondio "Access denied" en una ruta que si existe, asi que probamos
+ * varias formas de mandar el token. La ruta de productos solo lista, no crea
+ * nada, y con cuerpo vacio ninguna ruta de pedidos puede registrar un pedido.
  */
-const PROBE_PATHS = [
-  "/integrations/products",
+const AUTH_HEADERS: { label: string; header: (token: string) => Record<string, string> }[] = [
+  { label: "dropi-integration-key", header: (t) => ({ "dropi-integration-key": t }) },
+  { label: "dropi-integration-token", header: (t) => ({ "dropi-integration-token": t }) },
+  { label: "Authorization: Bearer", header: (t) => ({ Authorization: `Bearer ${t}` }) },
+  { label: "Authorization (sin Bearer)", header: (t) => ({ Authorization: t }) },
+  { label: "X-Authorization", header: (t) => ({ "X-Authorization": t }) },
+  { label: "x-api-key", header: (t) => ({ "x-api-key": t }) },
+  { label: "integration-key", header: (t) => ({ "integration-key": t }) },
+];
+
+/** Rutas candidatas para crear el pedido, con el header por defecto. */
+const ORDER_PATHS = [
   "/integrations/orders/create",
   "/integrations/create-order",
-  "/integrations/order",
-  "/integrations/orders/store",
-  "/integrations/save-order",
-  "/integrations/neworder",
-  "/integrations/new-order",
-  "/integrations/orders/save",
-  "/api/integrations/orders/create",
+  "/integrations/createOrder",
+  "/integrations/orders/add",
+  "/integrations/upload-order",
+  "/integrations/import-order",
 ];
 
 export type DropiProbe = { path: string; status: number; snippet: string };
 
-/** Prueba el token contra las rutas candidatas y devuelve que respondio cada una. */
+/**
+ * Primero busca con que header acepta Dropi el token, y luego, si alguno
+ * funciona, prueba los nombres candidatos del servicio que crea pedidos.
+ */
 export async function testDropiConnection(): Promise<{ ok: boolean; probes: DropiProbe[] }> {
   const settings = await getSettings();
-  if (!settings.dropiToken?.trim()) throw new Error("Falta el token de integracion de Dropi");
+  const token = settings.dropiToken?.trim();
+  if (!token) throw new Error("Falta el token de integracion de Dropi");
 
   const probes: DropiProbe[] = [];
-  for (const path of PROBE_PATHS) {
+
+  async function probe(label: string, path: string, headers: Record<string, string>) {
     try {
       const response = await fetch(joinUrl(settings.dropiBaseUrl, path), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "dropi-integration-key": settings.dropiToken.trim(),
-        },
+        headers: { "Content-Type": "application/json", Accept: "application/json", ...headers },
         body: "{}",
       });
       const raw = await response.text();
-      probes.push({ path, status: response.status, snippet: raw.slice(0, 220) });
+      probes.push({ path: label, status: response.status, snippet: raw.slice(0, 220) });
+      return response.status;
     } catch (error) {
       probes.push({
-        path,
+        path: label,
         status: 0,
         snippet: error instanceof Error ? error.message : String(error),
       });
+      return 0;
     }
   }
 
-  // Cualquier respuesta distinta de 404 indica que la ruta existe.
-  return { ok: probes.some((probe) => probe.status !== 404 && probe.status !== 0), probes };
+  // 1. Que header acepta el token, sobre una ruta que ya sabemos que existe.
+  let working: ((token: string) => Record<string, string>) | null = null;
+  for (const auth of AUTH_HEADERS) {
+    const status = await probe(`AUTH ${auth.label}`, "/integrations/products", auth.header(token));
+    if (status !== 401 && status !== 403 && status !== 0 && !working) working = auth.header;
+  }
+
+  // 2. Con el header que paso, buscamos el nombre del servicio de pedidos.
+  if (working) {
+    for (const path of ORDER_PATHS) {
+      await probe(`RUTA ${path}`, path, working(token));
+    }
+  }
+
+  return { ok: Boolean(working), probes };
 }
 
 /** Envia un pedido ya confirmado a Dropi y guarda el resultado. */
