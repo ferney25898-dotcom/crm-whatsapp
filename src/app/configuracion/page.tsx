@@ -51,6 +51,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dropiTest, setDropiTest] = useState<string | null>(null);
+  const [botTest, setBotTest] = useState<{ ok: boolean; message: string } | null>(null);
 
   const loadSessions = useCallback(async () => {
     const response = await fetch("/api/sessions");
@@ -127,6 +128,13 @@ export default function SettingsPage() {
     });
     if (response.ok) setSaved(true);
     setSaving(false);
+  }
+
+  async function testBot() {
+    setBotTest({ ok: true, message: "Probando..." });
+    const response = await fetch("/api/settings/bot", { method: "POST" });
+    const result = await response.json();
+    setBotTest({ ok: Boolean(result.ok), message: result.message });
   }
 
   async function testDropi() {
@@ -351,6 +359,20 @@ export default function SettingsPage() {
                   onChange={(e) => set("globalPrompt", e.target.value)}
                   placeholder="Ej: Nunca pidas datos de tarjeta. Siempre confirma la ciudad antes de cerrar."
                 />
+              </div>
+
+              <div>
+                <button onClick={testBot} className="btn-ghost">
+                  Probar el bot
+                </button>
+                {botTest && (
+                  <p className={`mt-2 text-xs ${botTest.ok ? "text-emerald-600" : "text-red-600"}`}>
+                    {botTest.message}
+                  </p>
+                )}
+                <p className="hint">
+                  Comprueba la API key sin pasar por WhatsApp. Guarda antes de probar.
+                </p>
               </div>
 
               <div>
