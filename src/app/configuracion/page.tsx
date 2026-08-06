@@ -452,8 +452,8 @@ export default function SettingsPage() {
               {dropiTest && (
                 <div className="space-y-1 text-xs">
                   <p className="text-slate-500">
-                    Un 200 significa que el token sirve en esa ruta. Copia estos resultados si
-                    ninguna responde 200.
+                    Un 404 significa que la ruta no existe. Cualquier otra respuesta (405, 400,
+                    422) significa que si existe: esa es la buena.
                   </p>
                   {dropiTest.map((probe) => (
                     <div

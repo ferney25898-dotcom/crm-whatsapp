@@ -60,22 +60,27 @@ async function request(path: string, body: unknown): Promise<DropiResult> {
 }
 
 /**
- * Rutas de solo lectura que se prueban para descubrir como responde la cuenta.
- * Dropi no publica su documentacion y el prefijo cambia entre paises y planes,
- * asi que preguntamos y dejamos que el usuario vea el resultado de cada una.
+ * Rutas candidatas. Dropi no publica documentacion y el nombre del servicio que
+ * crea pedidos cambia entre cuentas, asi que las probamos con un cuerpo vacio:
+ * un 404 significa que la ruta no existe y un error de validacion (400/422)
+ * significa que si existe. Con el cuerpo vacio Dropi nunca crea un pedido.
  */
 const PROBE_PATHS = [
   "/integrations/products",
-  "/integrations/orders",
-  "/api/integrations/products",
-  "/api/products",
-  "/orders/myorders",
-  "/api/orders/myorders",
+  "/integrations/orders/create",
+  "/integrations/create-order",
+  "/integrations/order",
+  "/integrations/orders/store",
+  "/integrations/save-order",
+  "/integrations/neworder",
+  "/integrations/new-order",
+  "/integrations/orders/save",
+  "/api/integrations/orders/create",
 ];
 
 export type DropiProbe = { path: string; status: number; snippet: string };
 
-/** Prueba el token contra varias rutas y devuelve que respondio cada una. */
+/** Prueba el token contra las rutas candidatas y devuelve que respondio cada una. */
 export async function testDropiConnection(): Promise<{ ok: boolean; probes: DropiProbe[] }> {
   const settings = await getSettings();
   if (!settings.dropiToken?.trim()) throw new Error("Falta el token de integracion de Dropi");
@@ -84,13 +89,16 @@ export async function testDropiConnection(): Promise<{ ok: boolean; probes: Drop
   for (const path of PROBE_PATHS) {
     try {
       const response = await fetch(joinUrl(settings.dropiBaseUrl, path), {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Accept: "application/json",
           "dropi-integration-key": settings.dropiToken.trim(),
         },
+        body: "{}",
       });
       const raw = await response.text();
-      probes.push({ path, status: response.status, snippet: raw.slice(0, 200) });
+      probes.push({ path, status: response.status, snippet: raw.slice(0, 220) });
     } catch (error) {
       probes.push({
         path,
@@ -100,7 +108,8 @@ export async function testDropiConnection(): Promise<{ ok: boolean; probes: Drop
     }
   }
 
-  return { ok: probes.some((probe) => probe.status === 200), probes };
+  // Cualquier respuesta distinta de 404 indica que la ruta existe.
+  return { ok: probes.some((probe) => probe.status !== 404 && probe.status !== 0), probes };
 }
 
 /** Envia un pedido ya confirmado a Dropi y guarda el resultado. */
