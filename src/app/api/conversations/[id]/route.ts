@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { emitAppEvent } from "@/lib/events";
+import { ensureAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const conversation = await prisma.conversation.findUnique({
     where: { id },
@@ -27,6 +31,9 @@ export async function GET(_request: Request, { params }: Context) {
 }
 
 export async function PATCH(request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const body = await request.json();
 

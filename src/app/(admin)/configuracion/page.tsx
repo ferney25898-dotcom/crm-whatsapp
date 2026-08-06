@@ -21,6 +21,14 @@ type ProductOption = { id: string; name: string };
 
 type DropiProbe = { path: string; status: number; snippet: string };
 
+type User = {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  active: boolean;
+};
+
 type Settings = {
   businessName: string;
   currency: string;
@@ -55,6 +63,14 @@ export default function SettingsPage() {
   const [dropiTest, setDropiTest] = useState<DropiProbe[] | null>(null);
   const [dropiError, setDropiError] = useState<string | null>(null);
   const [botTest, setBotTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [newUser, setNewUser] = useState({ username: "", name: "", password: "", role: "auxiliar" });
+  const [userError, setUserError] = useState<string | null>(null);
+
+  const loadUsers = useCallback(async () => {
+    const response = await fetch("/api/users");
+    if (response.ok) setUsers(await response.json());
+  }, []);
 
   const loadSessions = useCallback(async () => {
     const response = await fetch("/api/sessions");
@@ -69,7 +85,8 @@ export default function SettingsPage() {
     fetch("/api/settings")
       .then((response) => response.json())
       .then(setSettings);
-  }, [loadSessions]);
+    loadUsers();
+  }, [loadSessions, loadUsers]);
 
   useLiveEvents((event) => {
     if (event.type === "session") loadSessions();
@@ -131,6 +148,46 @@ export default function SettingsPage() {
     });
     if (response.ok) setSaved(true);
     setSaving(false);
+  }
+
+  async function addUser() {
+    setUserError(null);
+    const response = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newUser),
+    });
+    if (response.ok) {
+      setNewUser({ username: "", name: "", password: "", role: "auxiliar" });
+      loadUsers();
+    } else {
+      const data = await response.json().catch(() => ({ error: "No se pudo crear" }));
+      setUserError(data.error);
+    }
+  }
+
+  async function updateUser(id: string, data: Record<string, unknown>) {
+    setUserError(null);
+    const response = await fetch("/api/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...data }),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({ error: "No se pudo actualizar" }));
+      setUserError(result.error);
+    }
+    loadUsers();
+  }
+
+  async function removeUser(id: string) {
+    if (!confirm("Eliminar este usuario? Perdera el acceso de inmediato.")) return;
+    const response = await fetch(`/api/users?id=${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({ error: "No se pudo eliminar" }));
+      setUserError(result.error);
+    }
+    loadUsers();
   }
 
   async function testBot() {
@@ -470,6 +527,103 @@ export default function SettingsPage() {
                   ))}
                 </div>
               )}
+            </section>
+            <section className="card space-y-4">
+              <div>
+                <h2 className="font-medium text-slate-900">Usuarios del panel</h2>
+                <p className="text-xs text-slate-500">
+                  El auxiliar solo ve la pestana de Pedidos: puede montarlos en Dropi pero no toca
+                  el entrenamiento del bot, la configuracion ni los numeros.
+                </p>
+              </div>
+
+              {users.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 p-3"
+                >
+                  <div className="min-w-40 flex-1">
+                    <p className="text-sm font-medium text-slate-900">{user.name}</p>
+                    <p className="text-xs text-slate-500">{user.username}</p>
+                  </div>
+                  <select
+                    className="field max-w-40"
+                    value={user.role}
+                    onChange={(e) => updateUser(user.id, { role: e.target.value })}
+                  >
+                    <option value="admin">Administrador</option>
+                    <option value="auxiliar">Auxiliar de pedidos</option>
+                  </select>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={user.active}
+                      onChange={(e) => updateUser(user.id, { active: e.target.checked })}
+                    />
+                    Activo
+                  </label>
+                  <button
+                    className="text-xs text-slate-500 hover:underline"
+                    onClick={() => {
+                      const password = prompt("Nueva contrasena (minimo 6 caracteres)");
+                      if (password && password.length >= 6) updateUser(user.id, { password });
+                    }}
+                  >
+                    Cambiar clave
+                  </button>
+                  <button className="btn-danger" onClick={() => removeUser(user.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+
+              <div className="rounded-lg border border-dashed border-slate-300 p-3">
+                <p className="mb-3 text-sm font-medium text-slate-800">Agregar un usuario</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="label">Usuario</label>
+                    <input
+                      className="field"
+                      value={newUser.username}
+                      onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                      placeholder="juan"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Nombre</label>
+                    <input
+                      className="field"
+                      value={newUser.name}
+                      onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                      placeholder="Juan Perez"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Contrasena</label>
+                    <input
+                      type="password"
+                      className="field"
+                      value={newUser.password}
+                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Permiso</label>
+                    <select
+                      className="field"
+                      value={newUser.role}
+                      onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                    >
+                      <option value="auxiliar">Auxiliar de pedidos</option>
+                      <option value="admin">Administrador</option>
+                    </select>
+                  </div>
+                </div>
+                {userError && <p className="mt-2 text-xs text-red-600">{userError}</p>}
+                <button onClick={addUser} className="btn-primary mt-3">
+                  <Plus className="h-4 w-4" /> Crear usuario
+                </button>
+              </div>
             </section>
           </>
         )}

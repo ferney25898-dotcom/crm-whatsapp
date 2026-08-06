@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createOrder } from "@/lib/orders";
+import { ensureUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const denied = await ensureUser();
+  if (denied) return denied;
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
 
@@ -19,6 +23,9 @@ export async function GET(request: Request) {
 
 /** Crea un pedido a mano desde el panel. */
 export async function POST(request: Request) {
+  const denied = await ensureUser();
+  if (denied) return denied;
+
   const body = await request.json();
 
   const contact = await prisma.contact.upsert({

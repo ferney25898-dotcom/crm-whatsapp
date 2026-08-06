@@ -1,4 +1,5 @@
 import { bus, type AppEvent } from "@/lib/events";
+import { ensureUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
  * numeros y pedidos creados, sin tener que recargar.
  */
 export async function GET() {
+  const denied = await ensureUser();
+  if (denied) return denied;
+
   const encoder = new TextEncoder();
   let listener: ((event: AppEvent) => void) | null = null;
   let heartbeat: NodeJS.Timeout | null = null;

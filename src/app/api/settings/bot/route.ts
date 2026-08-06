@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { getSettings, resolveAiKey } from "@/lib/settings";
+import { ensureAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic";
  * key y el modelo estan bien configurados antes de culpar a otra cosa.
  */
 export async function POST() {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const settings = await getSettings();
 
   if (!settings.aiEnabled) {

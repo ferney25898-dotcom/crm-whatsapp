@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { emitAppEvent } from "@/lib/events";
 import { sendOrderToDropi } from "@/lib/dropi/client";
+import { ensureAdmin, ensureUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Context) {
+  const denied = await ensureUser();
+  if (denied) return denied;
+
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
@@ -18,6 +22,9 @@ export async function GET(_request: Request, { params }: Context) {
 }
 
 export async function PATCH(request: Request, { params }: Context) {
+  const denied = await ensureUser();
+  if (denied) return denied;
+
   const { id } = await params;
   const body = await request.json();
 
@@ -49,6 +56,9 @@ export async function PATCH(request: Request, { params }: Context) {
 }
 
 export async function DELETE(_request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   await prisma.order.delete({ where: { id } });
   return NextResponse.json({ ok: true });

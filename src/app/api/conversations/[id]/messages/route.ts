@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { recordOutgoing } from "@/lib/bot/pipeline";
 import { jidFromPhone, sendText } from "@/lib/whatsapp/manager";
+import { ensureAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,9 @@ type Context = { params: Promise<{ id: string }> };
 
 /** Envia un mensaje escrito por el asesor desde el panel. */
 export async function POST(request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const { body } = await request.json();
   if (!body?.trim()) return NextResponse.json({ error: "Mensaje vacio" }, { status: 400 });

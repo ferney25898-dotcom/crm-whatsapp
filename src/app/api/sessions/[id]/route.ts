@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resetSession, startSession, stopSession } from "@/lib/whatsapp/manager";
+import { ensureAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const session = await prisma.whatsappSession.findUnique({ where: { id } });
   if (!session) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
@@ -14,6 +18,9 @@ export async function GET(_request: Request, { params }: Context) {
 }
 
 export async function PATCH(request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const body = await request.json();
 
@@ -47,6 +54,9 @@ export async function PATCH(request: Request, { params }: Context) {
 }
 
 export async function DELETE(_request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   await resetSession(id).catch(() => null);
   await prisma.whatsappSession.delete({ where: { id } });

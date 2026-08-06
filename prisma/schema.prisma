@@ -307,3 +307,32 @@ model OrderItem {
   unitPrice   Float
   variant     String?
 }
+
+/// Persona que entra al panel.
+model User {
+  id           String @id @default(cuid())
+  /// Con esto inicia sesion. Puede ser un correo o un nombre corto.
+  username     String @unique
+  name         String
+  passwordHash String
+  /// admin = todo | auxiliar = solo la pestana de Pedidos.
+  role         String @default("auxiliar")
+  active       Boolean @default(true)
+
+  sessions UserSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Sesion abierta en un navegador.
+model UserSession {
+  id        String @id @default(cuid())
+  token     String @unique
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ensureAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,9 @@ type Context = { params: Promise<{ id: string }> };
 const NUMERIC_FIELDS = ["price", "comparePrice", "cost", "shippingCost"] as const;
 
 export async function GET(_request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const product = await prisma.product.findUnique({
     where: { id },
@@ -18,6 +22,9 @@ export async function GET(_request: Request, { params }: Context) {
 }
 
 export async function PATCH(request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   const body = await request.json();
 
@@ -73,6 +80,9 @@ export async function PATCH(request: Request, { params }: Context) {
 }
 
 export async function DELETE(_request: Request, { params }: Context) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const { id } = await params;
   await prisma.product.delete({ where: { id } });
   return NextResponse.json({ ok: true });

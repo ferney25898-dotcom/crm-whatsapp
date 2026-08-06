@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { ensureAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const products = await prisma.product.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { faqs: true, objections: true, conversations: true } } },
@@ -12,6 +16,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = await ensureAdmin();
+  if (denied) return denied;
+
   const body = await request.json();
   const product = await prisma.product.create({
     data: {
