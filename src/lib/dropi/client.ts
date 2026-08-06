@@ -59,19 +59,48 @@ async function request(path: string, body: unknown): Promise<DropiResult> {
   };
 }
 
-/** Prueba el token sin crear nada, para el boton "Probar conexion". */
-export async function testDropiConnection(): Promise<DropiResult> {
+/**
+ * Rutas de solo lectura que se prueban para descubrir como responde la cuenta.
+ * Dropi no publica su documentacion y el prefijo cambia entre paises y planes,
+ * asi que preguntamos y dejamos que el usuario vea el resultado de cada una.
+ */
+const PROBE_PATHS = [
+  "/integrations/products",
+  "/integrations/orders",
+  "/api/integrations/products",
+  "/api/products",
+  "/orders/myorders",
+  "/api/orders/myorders",
+];
+
+export type DropiProbe = { path: string; status: number; snippet: string };
+
+/** Prueba el token contra varias rutas y devuelve que respondio cada una. */
+export async function testDropiConnection(): Promise<{ ok: boolean; probes: DropiProbe[] }> {
   const settings = await getSettings();
   if (!settings.dropiToken?.trim()) throw new Error("Falta el token de integracion de Dropi");
 
-  const response = await fetch(joinUrl(settings.dropiBaseUrl, "/integrations/products"), {
-    headers: {
-      Accept: "application/json",
-      "dropi-integration-key": settings.dropiToken.trim(),
-    },
-  });
-  const raw = await response.text();
-  return { ok: response.ok, status: response.status, raw: raw.slice(0, 2000) };
+  const probes: DropiProbe[] = [];
+  for (const path of PROBE_PATHS) {
+    try {
+      const response = await fetch(joinUrl(settings.dropiBaseUrl, path), {
+        headers: {
+          Accept: "application/json",
+          "dropi-integration-key": settings.dropiToken.trim(),
+        },
+      });
+      const raw = await response.text();
+      probes.push({ path, status: response.status, snippet: raw.slice(0, 200) });
+    } catch (error) {
+      probes.push({
+        path,
+        status: 0,
+        snippet: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { ok: probes.some((probe) => probe.status === 200), probes };
 }
 
 /** Envia un pedido ya confirmado a Dropi y guarda el resultado. */

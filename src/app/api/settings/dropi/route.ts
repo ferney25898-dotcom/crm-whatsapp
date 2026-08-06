@@ -3,13 +3,12 @@ import { testDropiConnection } from "@/lib/dropi/client";
 
 export const dynamic = "force-dynamic";
 
-/** Prueba el token de Dropi y devuelve la respuesta cruda para depurar. */
+/** Prueba el token de Dropi contra varias rutas y devuelve que respondio cada una. */
 export async function POST() {
   try {
-    const result = await testDropiConnection();
-    return NextResponse.json(result);
+    return NextResponse.json(await testDropiConnection());
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error desconocido";
-    return NextResponse.json({ ok: false, status: 0, raw: message }, { status: 400 });
+    return NextResponse.json({ ok: false, probes: [], error: message }, { status: 400 });
   }
 }

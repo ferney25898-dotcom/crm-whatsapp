@@ -19,6 +19,8 @@ type Session = {
 
 type ProductOption = { id: string; name: string };
 
+type DropiProbe = { path: string; status: number; snippet: string };
+
 type Settings = {
   businessName: string;
   currency: string;
@@ -50,7 +52,8 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [dropiTest, setDropiTest] = useState<string | null>(null);
+  const [dropiTest, setDropiTest] = useState<DropiProbe[] | null>(null);
+  const [dropiError, setDropiError] = useState<string | null>(null);
   const [botTest, setBotTest] = useState<{ ok: boolean; message: string } | null>(null);
 
   const loadSessions = useCallback(async () => {
@@ -138,14 +141,12 @@ export default function SettingsPage() {
   }
 
   async function testDropi() {
-    setDropiTest("Probando...");
+    setDropiError(null);
+    setDropiTest(null);
     const response = await fetch("/api/settings/dropi", { method: "POST" });
     const result = await response.json();
-    setDropiTest(
-      result.ok
-        ? "Conexion correcta con Dropi."
-        : `Dropi respondio ${result.status}: ${String(result.raw).slice(0, 300)}`,
-    );
+    if (result.error) setDropiError(result.error);
+    setDropiTest(result.probes ?? []);
   }
 
   return (
@@ -445,9 +446,30 @@ export default function SettingsPage() {
               </div>
 
               <button onClick={testDropi} className="btn-ghost">
-                Probar conexion
+                Buscar la ruta correcta
               </button>
-              {dropiTest && <p className="text-xs text-slate-600">{dropiTest}</p>}
+              {dropiError && <p className="text-xs text-red-600">{dropiError}</p>}
+              {dropiTest && (
+                <div className="space-y-1 text-xs">
+                  <p className="text-slate-500">
+                    Un 200 significa que el token sirve en esa ruta. Copia estos resultados si
+                    ninguna responde 200.
+                  </p>
+                  {dropiTest.map((probe) => (
+                    <div
+                      key={probe.path}
+                      className={`rounded border px-2 py-1 ${
+                        probe.status === 200
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : "border-slate-200 bg-slate-50 text-slate-600"
+                      }`}
+                    >
+                      <span className="font-medium">{probe.status}</span> {probe.path}
+                      <span className="block break-all opacity-70">{probe.snippet}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </>
         )}
