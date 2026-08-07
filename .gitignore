@@ -45,3 +45,6 @@ next-env.d.ts
 # Base de datos y credenciales de WhatsApp
 /data
 !/.env.example
+
+# Ejecutable descargado por scripts/compartir.ps1
+scripts/cloudflared.exe
