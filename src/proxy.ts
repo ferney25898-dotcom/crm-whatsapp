@@ -5,7 +5,7 @@ import { SESSION_COOKIE } from "@/lib/session-cookie";
  * Manda al login a quien no tenga sesion. La validacion de verdad la hace cada
  * ruta contra la base de datos: aqui solo miramos si trae la cookie.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublic =
